@@ -1,0 +1,38 @@
+{
+  "indexed_at": "2026-03-11T15:43:32.203784",
+  "total_documents": 4,
+  "documents": [
+    {
+      "id": "1adbbebf-b49b-8003-a478-ec8f5196468b",
+      "type": "page",
+      "title": "BizOps",
+      "content": "### 📌 Descripción y Objetivo\nEl dashboard AWS - Listado Provisiones Bloqueadas permite visualizar las provisiones que no pueden ser completadas debido a falta de documentación, confirmaciones pendientes o errores en la documentación proporcionada.\nEl objetivo es desbloquear estas provisiones lo antes posible, priorizando aquellas que llevan más tiempo en espera. Cada comercial debe asegurarse de revisar la documentación pendiente y tomar las acciones necesarias para agilizar la provisión.\n🏷️ Leyenda\n- Comercial Responsable Altostratus → Comercial asignado al cliente.\n- Cliente → Nombre del cliente con provisión bloqueada.\n- CIF → Identificación fiscal del cliente.\n- AP / SA Expl → Actividades y subactividades de la provisión.\n- Issue Type → Tipo de provisión: Nueva, Renovación o Ampliación.\n- Status →\n🔹 Bloqueado Altostratus → Acciones pendientes dentro de Altostratus (ej. falta documentación del cliente, datos inconsistentes entre sherpa y oferta).\n🔹 Bloqueado Cliente → Acciones pendientes del cliente (ej. aceptación de invitaciones de cuenta, firma del CTA, etc).\n- Created → Fecha de recepción de la provisión (priorizar las más antiguas).\n- Documentación Pendiente → Información faltante que impide la provisión. Para AWS, la documentación esencial incluye:\n- Oferta firmada por cliente (con duración, markups, modalidad del servicio).\n- Sherpa con datos correctos y coherentes con la oferta.\n- DPP correctamente cumplimentado. Es imprescindible tener en cuenta si es MPA Dedicada o no, así como de resto de datos detallados en el DPP.\n- Notas Comercial → Registro en bitácora con fecha, hora e iniciales de cada acción realizada.\n- Documentación Comercial → Espacio para adjuntar documentos verificados (oferta firmada, sherpa validado, DPP correcto).\n- Assignee → Contacto de Business Operations para casos urgentes.\n📖 Instrucciones para Comerciales\n✅ 1. Revisa periódicamente la tabla → Identifica las provisiones bloqueadas asignadas a ti y revisa el estado + documentación pendiente.\n📝 2. Actualiza el campo \"Notas Comercial\" → Registra cada acción tomada en formato bitácora con: 📅 Fecha | ⏰ Hora | 🔠 Iniciales | 📝 Acción realizada\n📂 3. Sube la documentación comercial solo si está validada:\n✔ Oferta firmada con datos correctos.\n✔ Sherpa alineado con la oferta.\n✔ DPP correctamente cumplimentado. Asegurate comprobar con cliente si se trata o no de una MPA dedicada!\n❌ No subas borradores ni documentos incompletos.\n⚠️ 4. Prioriza las provisiones más antiguas → Las que llevan más tiempo bloqueadas deben efectuarse con urgencia.\n🚨 5. Contacta al Assignee solo en casos urgentes → Primero revisa la documentación y gestiona con el cliente cualquier información pendiente.\n🔒 No eliminar ninguna columna de la tabla. Solo se deben editar las columnas de “Notas Comercial” y “Documentación Comercial” ",
+      "url": "https://www.notion.so/BizOps-1adbbebfb49b8003a478ec8f5196468b",
+      "last_edited": "2026-02-24T19:23:00.000Z"
+    },
+    {
+      "id": "12ebbebf-b49b-8001-ad25-e2ecc5036acc",
+      "type": "page",
+      "title": "AWS",
+      "content": "# Backlog - Priorización\nÚnicamente se pueden tocar las columnas de “Prioridad”, “Indicar Oportunidad SF” y “Comentarios”por parte del equipo comercial. \nEl resto de propiedades provienen de una sincronización con Jira.\n# Proyectos en curso\nNo modificar ninguna columna o fila. Es una sincronización directa con Jira.\nUntitled \nUntitled \n---\nBienvenido al espacio del equipo de Altostratus AWS",
+      "url": "https://www.notion.so/AWS-12ebbebfb49b8001ad25e2ecc5036acc",
+      "last_edited": "2026-02-24T19:22:00.000Z"
+    },
+    {
+      "id": "1aebbebf-b49b-8098-b107-e12b0c92a5de",
+      "type": "page",
+      "title": "AWS - Listado Provisiones Bloqueadas ",
+      "content": "### 📌 Descripción y Objetivo\nEl dashboard AWS - Listado Provisiones Bloqueadas permite visualizar las provisiones que no pueden ser completadas debido a falta de documentación, confirmaciones pendientes o errores en la documentación proporcionada.\nEl objetivo es desbloquear estas provisiones lo antes posible, priorizando aquellas que llevan más tiempo en espera. Cada comercial debe asegurarse de revisar la documentación pendiente y tomar las acciones necesarias para agilizar la provisión.\n🏷️ Leyenda\n- Comercial Responsable Altostratus → Comercial asignado al cliente.\n- Cliente → Nombre del cliente con provisión bloqueada.\n- CIF → Identificación fiscal del cliente.\n- AP / SA Expl → Actividades y subactividades de la provisión.\n- Issue Type → Tipo de provisión: Nueva, Renovación o Ampliación.\n- Status →\n🔹 Bloqueado Altostratus → Acciones pendientes dentro de Altostratus (ej. falta documentación del cliente, datos inconsistentes entre sherpa y oferta).\n🔹 Bloqueado Cliente → Acciones pendientes del cliente (ej. aceptación de invitaciones de cuenta, firma del CTA, etc).\n- Created → Fecha de recepción de la provisión (priorizar las más antiguas).\n- Documentación Pendiente → Información faltante que impide la provisión. Para AWS, la documentación esencial incluye:\n- Oferta firmada por cliente (con duración, markups, modalidad del servicio).\n- Sherpa con datos correctos y coherentes con la oferta.\n- DPP correctamente cumplimentado. Es imprescindible tener en cuenta si es MPA Dedicada o no, así como de resto de datos detallados en el DPP.\n- Notas Comercial → Registro en bitácora con fecha, hora e iniciales de cada acción realizada.\n- Documentación Comercial → Espacio para adjuntar documentos verificados (oferta firmada, sherpa validado, DPP correcto).\n- Assignee → Contacto de Business Operations para casos urgentes.\n📖 Instrucciones para Comerciales\n✅ 1. Revisa periódicamente la tabla → Identifica las provisiones bloqueadas asignadas a ti y revisa el estado + documentación pendiente.\n📝 2. Actualiza el campo \"Notas Comercial\" → Registra cada acción tomada en formato bitácora con: 📅 Fecha | ⏰ Hora | 🔠 Iniciales | 📝 Acción realizada\n📂 3. Sube la documentación comercial solo si está validada:\n✔ Oferta firmada con datos correctos.\n✔ Sherpa alineado con la oferta.\n✔ DPP correctamente cumplimentado. Asegurate comprobar con cliente si se trata o no de una MPA dedicada!\n❌ No subas borradores ni documentos incompletos.\n⚠️ 4. Prioriza las provisiones más antiguas → Las que llevan más tiempo bloqueadas deben efectuarse con urgencia.\n🚨 5. Contacta al Assignee solo en casos urgentes → Primero revisa la documentación y gestiona con el cliente cualquier información pendiente.\n🔒 No eliminar ninguna columna de la tabla. Solo se deben editar las columnas de “Notas Comercial” y “Documentación Comercial” ",
+      "url": "https://www.notion.so/AWS-Listado-Provisiones-Bloqueadas-1aebbebfb49b8098b107e12b0c92a5de",
+      "last_edited": "2026-01-28T08:08:00.000Z"
+    },
+    {
+      "id": "21bbbebf-b49b-80a2-b416-d98010b7af43",
+      "type": "page",
+      "title": "Proyectos en curso y priorización backlog",
+      "content": "# Backlog - Priorización\nÚnicamente se pueden tocar las columnas de “Prioridad”, “Indicar Oportunidad SF” y “Comentarios”por parte del equipo comercial. \nEl resto de propiedades provienen de una sincronización con Jira.\n# Proyectos en curso\nNo modificar ninguna columna o fila. Es una sincronización directa con Jira.",
+      "url": "https://www.notion.so/Proyectos-en-curso-y-priorizaci-n-backlog-21bbbebfb49b80a2b416d98010b7af43",
+      "last_edited": "2025-06-24T10:56:00.000Z"
+    }
+  ]
+}
