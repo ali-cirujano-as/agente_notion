@@ -3,29 +3,83 @@ import json
 import os
 import logging
 from datetime import datetime
+from typing import Optional
 from .notion_client import NotionClient
 from .text_extractor import (
     extract_block_text,
     extract_page_title,
     extract_database_row,
+    extract_property_value,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class NotionIndexer:
-    def __init__(self, token: str, index_path: str):
+    def __init__(self, token: str, index_path: str, cloud_filter: Optional[list] = None):
         self.client = NotionClient(token)
         self.index_path = index_path
-        self.documents: list[dict] = []
+        self.documents: list = []
+        # Si se especifica, solo indexa filas de BD cuya columna "Cloud" coincida
+        self.cloud_filter = [c.lower() for c in cloud_filter] if cloud_filter else None
+
+    def _row_matches_cloud(self, row: dict) -> bool:
+        """Comprueba si una fila de BD pasa el filtro de cloud."""
+        if not self.cloud_filter:
+            return True
+        props = row.get("properties", {})
+        # Si la fila no tiene columna "Cloud", incluirla (no filtrar)
+        if "Cloud" not in props:
+            return True
+        cloud_val = extract_property_value(props["Cloud"]).lower()
+        # Si el valor está vacío, incluirla
+        if not cloud_val:
+            return True
+        return cloud_val in self.cloud_filter
 
     def _extract_page_content(self, page_id: str, depth: int = 0) -> str:
-        """Extrae recursivamente el contenido de una página."""
+        """Extrae recursivamente el contenido de una página, incluyendo BDs embebidas."""
         if depth > 3:
             return ""
         blocks = self.client.get_block_children(page_id)
         lines = []
         for block in blocks:
+            btype = block.get("type", "")
+
+            # Si es una base de datos hija (child_database), extraer sus filas
+            if btype == "child_database":
+                db_title = block.get("child_database", {}).get("title", "")
+                try:
+                    rows = self.client.query_database(block["id"])
+                    row_texts = []
+                    for row in rows:
+                        if not self._row_matches_cloud(row):
+                            continue
+                        row_text = extract_database_row(row)
+                        if row_text:
+                            row_texts.append(row_text)
+                    if row_texts:
+                        lines.append(f"\n## Base de datos: {db_title}")
+                        lines.extend(row_texts)
+                        logger.info(f"    Extraídas {len(row_texts)} filas de BD embebida: {db_title}")
+                except Exception as e:
+                    logger.warning(f"    Error extrayendo BD embebida {block['id']}: {e}")
+                continue
+
+            # Recurrir dentro de synced_block (pueden contener BDs u otro contenido)
+            if btype == "synced_block":
+                synced_data = block.get("synced_block", {})
+                synced_from = synced_data.get("synced_from")
+                # Solo explorar si es el bloque original (synced_from=None)
+                # o si tiene hijos
+                if block.get("has_children"):
+                    child_text = self._extract_page_content(
+                        block["id"], depth + 1
+                    )
+                    if child_text:
+                        lines.append(child_text)
+                continue
+
             text = extract_block_text(block)
             if text:
                 lines.append(text)
@@ -42,10 +96,11 @@ class NotionIndexer:
         self.documents = []
         logger.info("Buscando contenido en Notion...")
 
-        # Indexar páginas
+        # Indexar páginas (ignorar filas de BD, ya se extraen como BD embebida)
         pages = self.client.search_all(filter_type="page")
-        logger.info(f"Encontradas {len(pages)} páginas")
-        for page in pages:
+        real_pages = [p for p in pages if p.get("parent", {}).get("type") != "database_id"]
+        logger.info(f"Encontradas {len(pages)} páginas ({len(pages) - len(real_pages)} son filas de BD, se omiten)")
+        for page in real_pages:
             try:
                 title = extract_page_title(page)
                 content = self._extract_page_content(page["id"])
@@ -76,6 +131,8 @@ class NotionIndexer:
                 rows = self.client.query_database(db["id"])
                 row_texts = []
                 for row in rows:
+                    if not self._row_matches_cloud(row):
+                        continue
                     row_text = extract_database_row(row)
                     if row_text:
                         row_texts.append(row_text)
@@ -121,17 +178,75 @@ class NotionIndexer:
                 return self.documents
         return []
 
+    # Sinónimos y variantes para mejorar la búsqueda
+    SYNONYMS = {
+        "caducidad": ["caducadas", "caducado", "renewal", "renovación", "expiración", "vencimiento", "vencidas"],
+        "caducadas": ["caducidad", "caducado", "renewal", "renovación", "expiración", "vencimiento", "vencidas"],
+        "renovación": ["renewal", "renovaciones", "renovar", "caducadas", "caducidad"],
+        "renovaciones": ["renewal", "renovación", "renovar", "avisos"],
+        "bloqueadas": ["bloqueados", "bloqueada", "bloqueado", "bloqueo"],
+        "bloqueados": ["bloqueadas", "bloqueada", "bloqueado", "bloqueo"],
+        "provisiones": ["provisión", "provision", "provisioning"],
+        "licencias": ["licencia", "suscripciones", "suscripción"],
+        "facturación": ["factura", "facturas", "billing", "consumo", "consumos", "facturacion"],
+        "facturacion": ["facturación", "factura", "facturas", "billing", "consumo", "consumos"],
+        "soporte": ["support", "incidencia", "incidencias", "ticket", "tickets"],
+        "cliente": ["clientes", "customer"],
+        "clientes": ["cliente", "customer"],
+        "billing": ["facturación", "factura", "consumo"],
+    }
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """Elimina tildes para búsqueda flexible."""
+        replacements = {
+            "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u",
+            "ü": "u", "ñ": "n",
+        }
+        for k, v in replacements.items():
+            text = text.replace(k, v)
+        return text
+
+    def _expand_keywords(self, keywords: list) -> list:
+        """Expande keywords con sinónimos."""
+        expanded = list(keywords)
+        for kw in keywords:
+            if kw in self.SYNONYMS:
+                expanded.extend(self.SYNONYMS[kw])
+        return list(set(expanded))
+
     def search(self, query: str) -> list[dict]:
-        """Búsqueda simple por keywords en el contenido indexado."""
+        """Búsqueda por keywords en el contenido indexado."""
         if not self.documents:
             self.load_index()
-        query_lower = query.lower()
-        keywords = query_lower.split()
+        query_lower = self._normalize(query.lower())
+        keywords = [kw for kw in query_lower.split() if len(kw) > 2]
+        expanded = self._expand_keywords(keywords)
+
+        # Si la query es muy genérica (1-2 palabras), devolver más resultados
+        max_results = 10 if len(keywords) <= 2 else 5
+
         results = []
         for doc in self.documents:
-            text = f"{doc['title']} {doc['content']}".lower()
-            score = sum(1 for kw in keywords if kw in text)
+            text = self._normalize(f"{doc['title']} {doc['content']}".lower())
+            # Puntuar con keywords originales (peso 2) + sinónimos (peso 1)
+            score = sum(2 for kw in keywords if kw in text)
+            score += sum(1 for kw in expanded if kw not in keywords and kw in text)
             if score > 0:
+                # Bonus para bases de datos (contienen datos reales)
+                if doc.get("type") == "database":
+                    score += 5
+                # Bonus si el título coincide directamente con la query
+                title_lower = self._normalize(doc["title"].lower())
+                title_score = sum(3 for kw in keywords if kw in title_lower)
+                score += title_score
                 results.append({**doc, "_score": score})
+
+        # Si hay pocos resultados para una query genérica, incluir todos
+        if len(results) < 3 and len(self.documents) > 0 and len(keywords) <= 3:
+            for doc in self.documents:
+                if not any(r["id"] == doc["id"] for r in results):
+                    results.append({**doc, "_score": 0})
+
         results.sort(key=lambda x: x["_score"], reverse=True)
-        return results[:5]
+        return results[:max_results]

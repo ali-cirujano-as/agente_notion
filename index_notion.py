@@ -25,6 +25,7 @@ def main():
         aws_indexer = NotionIndexer(
             aws_token,
             os.path.join(os.path.dirname(__file__), ".data", "aws_index.json"),
+            cloud_filter=["aws"],
         )
         aws_count = aws_indexer.index_all()
         logger.info(f"AWS: {aws_count} documentos indexados")
@@ -38,6 +39,7 @@ def main():
         gcp_indexer = NotionIndexer(
             gcp_token,
             os.path.join(os.path.dirname(__file__), ".data", "gcp_index.json"),
+            cloud_filter=["gcp", "gws"],
         )
         gcp_count = gcp_indexer.index_all()
         logger.info(f"GCP: {gcp_count} documentos indexados")

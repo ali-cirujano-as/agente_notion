@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 """Arranca el bot de Slack para documentación GCP."""
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(__file__))
+
 from dotenv import load_dotenv
-from notion_shared.indexer import NotionIndexer
+from agents.gcp_agent.agent import agent
 from slack_bot import run_bot
 
 load_dotenv()
 
-indexer = NotionIndexer(
-    os.getenv("NOTION_TOKEN_GCP", ""),
-    os.path.join(os.path.dirname(__file__), ".data", "gcp_index.json"),
-)
-
-allowed = set(filter(None, os.getenv("SLACK_ALLOWED_USERS_GCP", "").split(",")))
-
 run_bot(
     bot_token=os.getenv("SLACK_BOT_TOKEN_GCP", ""),
     app_token=os.getenv("SLACK_APP_TOKEN_GCP", ""),
-    allowed_users=allowed,
-    indexer=indexer,
-    bot_name="GCP Notion Bot",
+    whitelist_path=os.path.join(os.path.dirname(__file__), ".data", "whitelist_gcp.json"),
+    adk_agent=agent,
+    bot_name="GCP Info Bot",
 )

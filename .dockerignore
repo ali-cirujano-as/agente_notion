@@ -1,0 +1,16 @@
+.venv
+.git
+.github
+.kiro
+.gemini
+__pycache__
+*.pyc
+contributing/
+assets/
+src/
+tests/
+.data/
+.env
+*.md
+*.sh
+!start.sh
