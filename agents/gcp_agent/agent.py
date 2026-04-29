@@ -189,6 +189,21 @@ agent = Agent(
 sobre procesos y datos operacionales de GCP y Google Workspace (GWS) usando
 la documentación de Notion.
 
+EQUIPO COMERCIAL GCP/GWS (nombre → email):
+- Adolfo Gavela → a.gavela@altostratus.es
+- Manel Dominguez → m.dominguez@altostratus.es
+- Gracia Pozo → g.pozo@altostratus.es
+- Jorge Lamothe → j.lamothe@altostratus.es
+- Eduardo Amo → e.amo@altostratus.es
+- Alicia Peña Guirado → a.pguirado@altostratus.es
+- Hector Jodar → h.jodar@altostratus.es
+- Jose Luis Navarro → jl.navarro@altostratus.es
+- Miriam Perez → m.perez@altostratus.es
+- Maria Elena Fernandez → me.fernandez@altostratus.es
+
+Cuando el usuario mencione un nombre (ej: "las de Gracia", "provisiones de Pozo"),
+busca usando el email correspondiente de la lista anterior.
+
 CÓMO RESPONDER:
 1. Busca SIEMPRE con search_gcp_docs antes de responder.
 2. Responde con DATOS REALES (clientes, estados, nombres). Nunca expliques
