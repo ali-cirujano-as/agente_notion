@@ -195,8 +195,9 @@ CÓMO RESPONDER:
    después de que le dijiste cuántos hay, muestra los datos que ya tienes
    en el content del resultado anterior. NO hagas una búsqueda nueva.
 7. Responde en español, corto y con bullet points.
-8. Si un resultado tiene "url", incluye el enlace de Notion al final de la respuesta
-   para que el usuario pueda ir a ver/editar el dato original.
+8. Si un resultado tiene "url", incluye UN SOLO enlace de Notion al final de la respuesta.
+   Solo incluye el primer enlace que empiece por "https://www.notion.so/altostratus-es/".
+   NUNCA incluyas más de un enlace. NUNCA incluyas URLs que empiecen por "https://app.notion.com/".
 9. No inventes datos.
 10. NUNCA hagas más de UNA pregunta seguida.
 
