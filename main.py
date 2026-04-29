@@ -108,16 +108,19 @@ start_daily_summary_timer(None, whitelist_for_summary, gcs_client, bot_name)
 
 logger.info(f"Aplicación {bot_name} lista (BOT_TYPE={BOT_TYPE})")
 
-# --- Timer de reindexación automática cada 8 horas ---
+# --- Timer de reindexación a las 6:00 y 15:00 hora España ---
 import threading
 from notion_shared.indexer import NotionIndexer
+import pytz
 
-REINDEX_INTERVAL_HOURS = 8
+REINDEX_HOURS = [6, 15]  # 6:00 AM y 15:00 PM hora España
+SPAIN_TZ = pytz.timezone("Europe/Madrid")
 
 
 def _background_reindex():
-    """Reindexa periódicamente en background."""
+    """Reindexa a las 6:00 y 15:00 hora España."""
     import time
+    from datetime import datetime, timedelta
 
     notion_token = os.getenv("NOTION_TOKEN_AWS" if BOT_TYPE == "aws" else "NOTION_TOKEN_GCP", "")
     cloud_filter = ["aws"] if BOT_TYPE == "aws" else ["gcp", "gws"]
@@ -133,16 +136,33 @@ def _background_reindex():
     except Exception as e:
         logger.error(f"Error en reindexación inicial: {e}")
 
-    # Reindexar cada N horas
+    # Reindexar a las horas programadas
     while True:
-        time.sleep(REINDEX_INTERVAL_HOURS * 3600)
+        now = datetime.now(SPAIN_TZ)
+        # Encontrar la próxima hora de reindexación
+        next_run = None
+        for hour in sorted(REINDEX_HOURS):
+            target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if target > now:
+                next_run = target
+                break
+        if next_run is None:
+            # Todas las horas de hoy ya pasaron, programar la primera de mañana
+            next_run = (now + timedelta(days=1)).replace(
+                hour=REINDEX_HOURS[0], minute=0, second=0, microsecond=0
+            )
+
+        wait_seconds = (next_run - now).total_seconds()
+        logger.info(f"Próxima reindexación a las {next_run.strftime('%H:%M')} ({wait_seconds/3600:.1f}h)")
+        time.sleep(wait_seconds)
+
         try:
             indexer = NotionIndexer(notion_token, local_path, cloud_filter=cloud_filter)
             count = indexer.index_all()
             indexer.save_index_to_gcs(gcs_client, gcs_path)
-            logger.info(f"Reindexación periódica completada: {count} documentos")
+            logger.info(f"Reindexación programada completada: {count} documentos")
         except Exception as e:
-            logger.error(f"Error en reindexación periódica: {e}")
+            logger.error(f"Error en reindexación programada: {e}")
 
 
 reindex_thread = threading.Thread(target=_background_reindex, daemon=True)
