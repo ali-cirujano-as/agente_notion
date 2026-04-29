@@ -34,6 +34,25 @@ indexer = NotionIndexer(
     gcs_path=_gcs_path,
 )
 
+# Mapeo de URLs: título del documento → URL de la vista que ve el comercial
+_TITLE_URL_MAP = {
+    "Listado de Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/GCP-Listado-Provisiones-Bloqueadas-1acbbebfb49b800c9b8af8d967f12429",
+    "GCP - Listado Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/GCP-Listado-Provisiones-Bloqueadas-1acbbebfb49b800c9b8af8d967f12429",
+    "GWS - Listado Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/GWS-Listado-Provisiones-Bloqueadas-1acbbebfb49b807984f5e12c01e946f0",
+    "Listado de Avisos de Renovación GWS": "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe",
+    "GWS - Avisos de Renovación": "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe",
+    "GWS Licencias Caducadas": "https://www.notion.so/altostratus-es/GWS-Licencias-Caducadas-1acbbebfb49b80fbb7e3eb23efbc9bc8",
+    "[Actualizado 23.03.2026] Licencias Caducadas a reclamar a TCCT  - Licencias Caducadas notion (1).csv": "https://www.notion.so/altostratus-es/GWS-Licencias-Caducadas-1acbbebfb49b80fbb7e3eb23efbc9bc8",
+    "Listado de provisiones en curso - EPPM": "https://www.notion.so/altostratus-es/GCP-Listado-Provisiones-Bloqueadas-1acbbebfb49b800c9b8af8d967f12429",
+}
+
+
+def _map_url(title: str, url: str) -> str:
+    """Reemplaza la URL de la fuente por la URL de la vista para el comercial."""
+    if title in _TITLE_URL_MAP:
+        return _TITLE_URL_MAP[title]
+    return url
+
 
 def _summarize_db_row(row_text: str) -> str:
     """Extrae solo las columnas clave de una fila de BD."""
@@ -106,7 +125,7 @@ def search_gcp_docs(query: str) -> dict:
                 "total_rows": total_rows,
                 "matched_rows": len(scored),
                 "content": content,
-                "url": r.get("url", ""),
+                "url": _map_url(r["title"], r.get("url", "")),
             })
         elif len(content) > 4000:
             scored = []
@@ -124,14 +143,14 @@ def search_gcp_docs(query: str) -> dict:
                 "title": r["title"],
                 "type": r["type"],
                 "content": content,
-                "url": r.get("url", ""),
+                "url": _map_url(r["title"], r.get("url", "")),
             })
         else:
             formatted.append({
                 "title": r["title"],
                 "type": r["type"],
                 "content": content[:2000],
-                "url": r.get("url", ""),
+                "url": _map_url(r["title"], r.get("url", "")),
             })
     return {"status": "ok", "results": formatted[:5]}
 
