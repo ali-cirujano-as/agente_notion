@@ -526,27 +526,36 @@ def _notify_admins_access_request(client, requester_id: str, bot_name: str):
 # --- Resumen diario automático ---
 
 def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_client: GCSClient, bot_name: str):
-    """Inicia un timer que envía resúmenes diarios a las 9:00 AM hora España."""
+    """Inicia un timer que envía resúmenes los lunes a las 9:00 AM hora España."""
     import time
-    from datetime import datetime
+    from datetime import datetime, timedelta
     import pytz
 
     SPAIN_TZ = pytz.timezone("Europe/Madrid")
-    TARGET_HOUR = 9  # 9:00 AM
+    TARGET_HOUR = 9
+    TARGET_WEEKDAY = 0  # Lunes = 0
+
+    # URLs de las vistas para el resumen
+    bot_type = os.getenv("BOT_TYPE", "").lower()
+    if bot_type == "aws":
+        URL_PROVISIONES = "https://www.notion.so/altostratus-es/AWS-Listado-Provisiones-Bloqueadas-1aebbebfb49b8098b107e12b0c92a5de"
+        URL_RENOVACIONES = "https://www.notion.so/altostratus-es/Listado-de-provisiones-en-curso-EPPM-2a1bbebfb49b80448253f24cf172d70c"
+    else:
+        URL_PROVISIONES = "https://www.notion.so/altostratus-es/GCP-Listado-Provisiones-Bloqueadas-1acbbebfb49b800c9b8af8d967f12429"
+        URL_RENOVACIONES = "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe"
 
     def _get_user_email_for_summary(client, user_id: str) -> str:
-        """Obtiene email del usuario para el resumen."""
         try:
             info = client.users_info(user=user_id)
             return info["user"]["profile"].get("email", "")
         except Exception:
             return ""
 
-    def _find_user_data(email: str, index_docs: list) -> dict:
-        """Busca provisiones bloqueadas y renovaciones del usuario en el índice."""
+    def _count_user_data(email: str, index_docs: list) -> dict:
+        """Cuenta provisiones bloqueadas y renovaciones del usuario."""
         email_lower = email.lower()
-        provisiones = []
-        renovaciones = []
+        n_provisiones = 0
+        n_renovaciones = 0
 
         for doc in index_docs:
             content = doc.get("content", "")
@@ -557,32 +566,13 @@ def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_cli
                 line_lower = line.lower()
                 if email_lower in line_lower:
                     if "bloqueado" in line_lower or "bloqueo" in line_lower:
-                        # Extraer cliente
-                        parts = line.split(" | ")
-                        cliente = ""
-                        status = ""
-                        for part in parts:
-                            if part.startswith("Cliente: "):
-                                cliente = part.replace("Cliente: ", "")
-                            if part.startswith("Status: "):
-                                status = part.replace("Status: ", "")
-                        if cliente:
-                            provisiones.append(f"• {cliente} ({status})")
-                    elif "renovación" in line_lower or "renewal" in line_lower or "Fecha Fin Real" in line:
-                        parts = line.split(" | ")
-                        cliente = ""
-                        fecha = ""
-                        for part in parts:
-                            if part.startswith("Cliente: "):
-                                cliente = part.replace("Cliente: ", "")
-                            if part.startswith("Fecha Fin Real: "):
-                                fecha = part.replace("Fecha Fin Real: ", "")
-                        if cliente:
-                            renovaciones.append(f"• {cliente} (vence: {fecha})")
+                        n_provisiones += 1
+                    elif "renovación" in line_lower or "renewal" in line_lower:
+                        n_renovaciones += 1
 
-        return {"provisiones": provisiones, "renovaciones": renovaciones}
+        return {"provisiones": n_provisiones, "renovaciones": n_renovaciones}
 
-    def _send_daily_summaries():
+    def _send_weekly_summaries():
         """Envía resúmenes a todos los usuarios de la whitelist."""
         from slack_sdk import WebClient
 
@@ -593,7 +583,6 @@ def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_cli
 
         client = WebClient(token=bot_token)
 
-        # Cargar índice desde GCS
         prefix = bot_name.lower().replace(" ", "_").split("_")[0]
         index_data = gcs_client.read_json(f"{prefix}/index.json")
         if not index_data:
@@ -602,7 +591,7 @@ def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_cli
         index_docs = index_data.get("documents", [])
 
         users = whitelist.list_users()
-        logger.info(f"Enviando resumen diario a {len(users)} usuarios...")
+        logger.info(f"Enviando resumen semanal a {len(users)} usuarios...")
 
         for user_id in users:
             try:
@@ -610,28 +599,23 @@ def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_cli
                 if not email:
                     continue
 
-                data = _find_user_data(email, index_docs)
-                provisiones = data["provisiones"]
-                renovaciones = data["renovaciones"]
+                data = _count_user_data(email, index_docs)
+                n_prov = data["provisiones"]
+                n_renov = data["renovaciones"]
 
-                # Solo enviar si hay algo que reportar
-                if not provisiones and not renovaciones:
+                if not n_prov and not n_renov:
                     continue
 
-                msg = f"☀️ *Buenos días! Tu resumen diario:*\n\n"
-                if provisiones:
-                    msg += f"*🚫 Provisiones bloqueadas ({len(provisiones)}):*\n"
-                    msg += "\n".join(provisiones[:10])
-                    if len(provisiones) > 10:
-                        msg += f"\n... y {len(provisiones) - 10} más"
-                    msg += "\n\n"
-                if renovaciones:
-                    msg += f"*📅 Renovaciones próximas ({len(renovaciones)}):*\n"
-                    msg += "\n".join(renovaciones[:10])
-                    if len(renovaciones) > 10:
-                        msg += f"\n... y {len(renovaciones) - 10} más"
+                # Formato corto con links
+                parts = []
+                if n_prov:
+                    parts.append(f"{n_prov} provisiones bloqueadas")
+                if n_renov:
+                    parts.append(f"{n_renov} renovaciones próximas")
 
-                # Enviar DM
+                msg = f"☀️ Buenos días! Tienes {' y '.join(parts)}. ¿Quieres que las revisemos?\n\n"
+                msg += f"📎 <{URL_PROVISIONES}|Ver provisiones> | <{URL_RENOVACIONES}|Ver renovaciones>"
+
                 dm = client.conversations_open(users=[user_id])
                 client.chat_postMessage(channel=dm["channel"]["id"], text=msg)
                 logger.info(f"Resumen enviado a {user_id} ({email})")
@@ -640,26 +624,27 @@ def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_cli
                 logger.warning(f"Error enviando resumen a {user_id}: {e}")
 
     def _timer_loop():
-        """Loop que espera hasta las 9:00 AM España y envía resúmenes."""
+        """Loop que espera hasta el próximo lunes a las 9:00 AM España."""
         while True:
             now = datetime.now(SPAIN_TZ)
-            # Calcular segundos hasta las 9:00 AM
-            target = now.replace(hour=TARGET_HOUR, minute=0, second=0, microsecond=0)
-            if now >= target:
-                # Ya pasó las 9:00, esperar hasta mañana
-                from datetime import timedelta
-                target += timedelta(days=1)
-            
+            # Calcular próximo lunes a las 9:00
+            days_until_monday = (TARGET_WEEKDAY - now.weekday()) % 7
+            if days_until_monday == 0 and now.hour >= TARGET_HOUR:
+                days_until_monday = 7  # Ya pasó este lunes, esperar al siguiente
+
+            target = (now + timedelta(days=days_until_monday)).replace(
+                hour=TARGET_HOUR, minute=0, second=0, microsecond=0
+            )
+
             wait_seconds = (target - now).total_seconds()
-            logger.info(f"Resumen diario programado en {wait_seconds/3600:.1f} horas")
+            logger.info(f"Resumen semanal programado para {target.strftime('%A %d/%m a las %H:%M')} ({wait_seconds/3600:.1f}h)")
             time.sleep(wait_seconds)
 
-            # Enviar resúmenes
             try:
-                _send_daily_summaries()
+                _send_weekly_summaries()
             except Exception as e:
-                logger.error(f"Error en resumen diario: {e}")
+                logger.error(f"Error en resumen semanal: {e}")
 
     thread = threading.Thread(target=_timer_loop, daemon=True)
     thread.start()
-    logger.info("Timer de resumen diario iniciado (9:00 AM España)")
+    logger.info("Timer de resumen semanal iniciado (lunes 9:00 AM España)")
