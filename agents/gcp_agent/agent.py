@@ -106,6 +106,7 @@ def search_gcp_docs(query: str) -> dict:
                 "total_rows": total_rows,
                 "matched_rows": len(scored),
                 "content": content,
+                "url": r.get("url", ""),
             })
         elif len(content) > 4000:
             scored = []
@@ -123,12 +124,14 @@ def search_gcp_docs(query: str) -> dict:
                 "title": r["title"],
                 "type": r["type"],
                 "content": content,
+                "url": r.get("url", ""),
             })
         else:
             formatted.append({
                 "title": r["title"],
                 "type": r["type"],
                 "content": content[:2000],
+                "url": r.get("url", ""),
             })
     return {"status": "ok", "results": formatted[:5]}
 
@@ -173,7 +176,8 @@ CÓMO RESPONDER:
    después de que le dijiste cuántos hay, muestra los datos que ya tienes
    en el content del resultado anterior. NO hagas una búsqueda nueva.
 7. Responde en español, corto y con bullet points.
-8. No incluyas enlaces ni referencias de Notion.
+8. Si un resultado tiene "url", incluye el enlace de Notion al final de la respuesta
+   para que el usuario pueda ir a ver/editar el dato original.
 9. No inventes datos.
 10. NUNCA hagas más de UNA pregunta seguida.
 
