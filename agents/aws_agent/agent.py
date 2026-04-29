@@ -158,7 +158,7 @@ def reindex_aws_docs() -> dict:
 
 
 agent = Agent(
-    model="gemini-2.5-pro",
+    model="gemini-2.5-flash",
     name="aws_agent",
     description="Agente experto en procesos AWS de la organización.",
     instruction="""Eres un asistente del equipo BizOps de Altostratus. Respondes consultas

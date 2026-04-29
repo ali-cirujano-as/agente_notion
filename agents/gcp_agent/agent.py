@@ -153,7 +153,7 @@ def reindex_gcp_docs() -> dict:
 
 
 agent = Agent(
-    model="gemini-2.5-pro",
+    model="gemini-2.5-flash",
     name="gcp_agent",
     description="Agente experto en procesos GCP/GWS de la organización.",
     instruction="""Eres un asistente del equipo BizOps de Altostratus. Respondes consultas
