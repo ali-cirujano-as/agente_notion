@@ -16,8 +16,24 @@ NOTION_TOKEN = os.getenv("NOTION_TOKEN_AWS", "")
 INDEX_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", ".data", "aws_index.json"
 )
+GCS_BUCKET = os.getenv("GCS_BUCKET", "")
 
-indexer = NotionIndexer(NOTION_TOKEN, INDEX_PATH, cloud_filter=["aws"])
+# Si GCS_BUCKET está configurado, cargar índice desde Cloud Storage
+_gcs_client = None
+_gcs_path = None
+if GCS_BUCKET:
+    from storage.gcs_client import GCSClient
+
+    _gcs_client = GCSClient(GCS_BUCKET)
+    _gcs_path = "aws/index.json"
+
+indexer = NotionIndexer(
+    NOTION_TOKEN,
+    INDEX_PATH,
+    cloud_filter=["aws"],
+    gcs_client=_gcs_client,
+    gcs_path=_gcs_path,
+)
 
 
 def _summarize_db_row(row_text: str) -> str:

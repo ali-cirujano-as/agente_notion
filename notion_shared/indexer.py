@@ -17,14 +17,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Caché global del módulo para evitar lecturas repetidas del índice.
+# Clave: gcs_path o index_path local; Valor: lista de documentos.
+_index_cache: dict[str, list[dict]] = {}
+
 
 class NotionIndexer:
-    def __init__(self, token: str, index_path: str, cloud_filter: Optional[list] = None):
+    def __init__(
+        self,
+        token: str,
+        index_path: str,
+        cloud_filter: Optional[list] = None,
+        gcs_client: "Optional[GCSClient]" = None,
+        gcs_path: Optional[str] = None,
+    ):
         self.client = NotionClient(token)
         self.index_path = index_path
         self.documents: list = []
         # Si se especifica, solo indexa filas de BD cuya columna "Cloud" coincida
         self.cloud_filter = [c.lower() for c in cloud_filter] if cloud_filter else None
+        # Opcional: cliente GCS para cargar/guardar índice en Cloud Storage
+        self._gcs_client = gcs_client
+        self._gcs_path = gcs_path
 
     def _row_matches_cloud(self, row: dict) -> bool:
         """Comprueba si una fila de BD pasa el filtro de cloud."""
@@ -168,9 +182,17 @@ class NotionIndexer:
 
         Args:
             gcs_client: Cliente de Cloud Storage. Si se proporciona junto con
-                gcs_path, el índice se sube también a GCS.
-            gcs_path: Ruta dentro del bucket (e.g. "aws/index.json").
+                gcs_path, el índice se sube también a GCS. Si no se proporciona,
+                usa el gcs_client de la instancia.
+            gcs_path: Ruta dentro del bucket (e.g. "aws/index.json"). Si no se
+                proporciona, usa el gcs_path de la instancia.
         """
+        global _index_cache
+
+        # Usar los parámetros de la instancia como fallback
+        effective_gcs_client = gcs_client or self._gcs_client
+        effective_gcs_path = gcs_path or self._gcs_path
+
         data = {
             "indexed_at": datetime.now().isoformat(),
             "total_documents": len(self.documents),
@@ -182,9 +204,14 @@ class NotionIndexer:
         with open(self.index_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
+        # Invalidar caché local
+        _index_cache.pop(self.index_path, None)
+
         # Si se proporciona GCS, subir también al bucket
-        if gcs_client is not None and gcs_path is not None:
-            self.save_index_to_gcs(gcs_client, gcs_path)
+        if effective_gcs_client is not None and effective_gcs_path is not None:
+            self.save_index_to_gcs(effective_gcs_client, effective_gcs_path)
+            # Invalidar caché GCS para que la próxima lectura obtenga datos frescos
+            _index_cache.pop(effective_gcs_path, None)
 
     def save_index_to_gcs(self, gcs_client: "GCSClient", gcs_path: str) -> None:
         """Sube el índice actual a Cloud Storage.
@@ -227,10 +254,37 @@ class NotionIndexer:
         return documents
 
     def load_index(self) -> list[dict]:
+        """Carga el índice desde GCS (si configurado) o desde archivo local.
+
+        Usa caché en memoria global del módulo para evitar lecturas repetidas.
+        """
+        global _index_cache
+
+        # Determinar la clave de caché
+        cache_key = self._gcs_path if self._gcs_client and self._gcs_path else self.index_path
+
+        # Si ya está en caché, usar directamente
+        if cache_key in _index_cache:
+            self.documents = _index_cache[cache_key]
+            return self.documents
+
+        # Intentar cargar desde GCS si está configurado
+        if self._gcs_client is not None and self._gcs_path is not None:
+            try:
+                self.documents = self.load_index_from_gcs(self._gcs_client, self._gcs_path)
+                if self.documents:
+                    _index_cache[cache_key] = self.documents
+                    return self.documents
+                logger.warning("Índice GCS vacío, intentando carga local como fallback")
+            except Exception as e:
+                logger.warning(f"Error cargando índice desde GCS, fallback a local: {e}")
+
+        # Fallback: cargar desde archivo local
         if os.path.exists(self.index_path):
             with open(self.index_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 self.documents = data.get("documents", [])
+                _index_cache[cache_key] = self.documents
                 return self.documents
         return []
 
