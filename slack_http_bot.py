@@ -518,3 +518,145 @@ def _notify_admins_access_request(client, requester_id: str, bot_name: str):
             )
         except Exception as e:
             logger.warning(f"No pude notificar al admin {admin_id}: {e}")
+
+
+# --- Resumen diario automático ---
+
+def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_client: GCSClient, bot_name: str):
+    """Inicia un timer que envía resúmenes diarios a las 9:00 AM hora España."""
+    import time
+    from datetime import datetime
+    import pytz
+
+    SPAIN_TZ = pytz.timezone("Europe/Madrid")
+    TARGET_HOUR = 9  # 9:00 AM
+
+    def _get_user_email_for_summary(client, user_id: str) -> str:
+        """Obtiene email del usuario para el resumen."""
+        try:
+            info = client.users_info(user=user_id)
+            return info["user"]["profile"].get("email", "")
+        except Exception:
+            return ""
+
+    def _find_user_data(email: str, index_docs: list) -> dict:
+        """Busca provisiones bloqueadas y renovaciones del usuario en el índice."""
+        email_lower = email.lower()
+        provisiones = []
+        renovaciones = []
+
+        for doc in index_docs:
+            content = doc.get("content", "")
+            lines = content.split("\n")
+            for line in lines:
+                if " | " not in line or "Cliente:" not in line:
+                    continue
+                line_lower = line.lower()
+                if email_lower in line_lower:
+                    if "bloqueado" in line_lower or "bloqueo" in line_lower:
+                        # Extraer cliente
+                        parts = line.split(" | ")
+                        cliente = ""
+                        status = ""
+                        for part in parts:
+                            if part.startswith("Cliente: "):
+                                cliente = part.replace("Cliente: ", "")
+                            if part.startswith("Status: "):
+                                status = part.replace("Status: ", "")
+                        if cliente:
+                            provisiones.append(f"• {cliente} ({status})")
+                    elif "renovación" in line_lower or "renewal" in line_lower or "Fecha Fin Real" in line:
+                        parts = line.split(" | ")
+                        cliente = ""
+                        fecha = ""
+                        for part in parts:
+                            if part.startswith("Cliente: "):
+                                cliente = part.replace("Cliente: ", "")
+                            if part.startswith("Fecha Fin Real: "):
+                                fecha = part.replace("Fecha Fin Real: ", "")
+                        if cliente:
+                            renovaciones.append(f"• {cliente} (vence: {fecha})")
+
+        return {"provisiones": provisiones, "renovaciones": renovaciones}
+
+    def _send_daily_summaries():
+        """Envía resúmenes a todos los usuarios de la whitelist."""
+        from slack_sdk import WebClient
+
+        bot_token = os.getenv("SLACK_BOT_TOKEN", "")
+        if not bot_token:
+            logger.warning("No se puede enviar resumen: SLACK_BOT_TOKEN no configurado")
+            return
+
+        client = WebClient(token=bot_token)
+
+        # Cargar índice desde GCS
+        prefix = bot_name.lower().replace(" ", "_").split("_")[0]
+        index_data = gcs_client.read_json(f"{prefix}/index.json")
+        if not index_data:
+            logger.warning("No se puede enviar resumen: índice vacío")
+            return
+        index_docs = index_data.get("documents", [])
+
+        users = whitelist.list_users()
+        logger.info(f"Enviando resumen diario a {len(users)} usuarios...")
+
+        for user_id in users:
+            try:
+                email = _get_user_email_for_summary(client, user_id)
+                if not email:
+                    continue
+
+                data = _find_user_data(email, index_docs)
+                provisiones = data["provisiones"]
+                renovaciones = data["renovaciones"]
+
+                # Solo enviar si hay algo que reportar
+                if not provisiones and not renovaciones:
+                    continue
+
+                msg = f"☀️ *Buenos días! Tu resumen diario:*\n\n"
+                if provisiones:
+                    msg += f"*🚫 Provisiones bloqueadas ({len(provisiones)}):*\n"
+                    msg += "\n".join(provisiones[:10])
+                    if len(provisiones) > 10:
+                        msg += f"\n... y {len(provisiones) - 10} más"
+                    msg += "\n\n"
+                if renovaciones:
+                    msg += f"*📅 Renovaciones próximas ({len(renovaciones)}):*\n"
+                    msg += "\n".join(renovaciones[:10])
+                    if len(renovaciones) > 10:
+                        msg += f"\n... y {len(renovaciones) - 10} más"
+
+                # Enviar DM
+                dm = client.conversations_open(users=[user_id])
+                client.chat_postMessage(channel=dm["channel"]["id"], text=msg)
+                logger.info(f"Resumen enviado a {user_id} ({email})")
+
+            except Exception as e:
+                logger.warning(f"Error enviando resumen a {user_id}: {e}")
+
+    def _timer_loop():
+        """Loop que espera hasta las 9:00 AM España y envía resúmenes."""
+        while True:
+            now = datetime.now(SPAIN_TZ)
+            # Calcular segundos hasta las 9:00 AM
+            target = now.replace(hour=TARGET_HOUR, minute=0, second=0, microsecond=0)
+            if now >= target:
+                # Ya pasó las 9:00, esperar hasta mañana
+                from datetime import timedelta
+                target += timedelta(days=1)
+            
+            wait_seconds = (target - now).total_seconds()
+            logger.info(f"Resumen diario programado en {wait_seconds/3600:.1f} horas")
+            time.sleep(wait_seconds)
+
+            # Enviar resúmenes
+            try:
+                _send_daily_summaries()
+            except Exception as e:
+                logger.error(f"Error en resumen diario: {e}")
+
+    thread = threading.Thread(target=_timer_loop, daemon=True)
+    thread.start()
+    logger.info("Timer de resumen diario iniciado (9:00 AM España)")
