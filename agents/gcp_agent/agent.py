@@ -152,6 +152,16 @@ def search_gcp_docs(query: str) -> dict:
                 "content": content[:2000],
                 "url": _map_url(r["title"], r.get("url", "")),
             })
+    # Filtrar: solo mantener URLs de altostratus-es y eliminar duplicadas
+    seen_urls = set()
+    for item in formatted:
+        url = item.get("url", "")
+        if not url.startswith("https://www.notion.so/altostratus-es/"):
+            item["url"] = ""
+        elif url in seen_urls:
+            item["url"] = ""
+        else:
+            seen_urls.add(url)
     return {"status": "ok", "results": formatted[:5]}
 
 
@@ -195,9 +205,11 @@ CÓMO RESPONDER:
    después de que le dijiste cuántos hay, muestra los datos que ya tienes
    en el content del resultado anterior. NO hagas una búsqueda nueva.
 7. Responde en español, corto y con bullet points.
-8. Si un resultado tiene "url", incluye UN SOLO enlace de Notion al final de la respuesta.
-   Solo incluye el primer enlace que empiece por "https://www.notion.so/altostratus-es/".
-   NUNCA incluyas más de un enlace. NUNCA incluyas URLs que empiecen por "https://app.notion.com/".
+8. Al final de tu respuesta, incluye EXACTAMENTE UN enlace a Notion.
+   Elige el enlace más relevante de los resultados — el que mejor corresponda
+   a la consulta del usuario. Solo usa URLs que empiecen por "https://www.notion.so/altostratus-es/".
+   Formato: "📎 Ver en Notion: <url>"
+   NUNCA incluyas más de un enlace. NUNCA uses URLs de "app.notion.com".
 9. No inventes datos.
 10. NUNCA hagas más de UNA pregunta seguida.
 
