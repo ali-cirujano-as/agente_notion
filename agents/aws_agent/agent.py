@@ -35,6 +35,31 @@ indexer = NotionIndexer(
     gcs_path=_gcs_path,
 )
 
+# Mapeo de URLs: fuente → vista que ve el comercial
+# Cuando el agente responde, usa estas URLs en vez de las de la fuente
+_URL_MAP = {
+    "https://app.notion.com/p/1b3bbebfb49b8089a47ee16614be326b": "https://www.notion.so/altostratus-es/AWS-Listado-Provisiones-Bloqueadas-1aebbebfb49b8098b107e12b0c92a5de",
+    "https://www.notion.so/1b3bbebfb49b8089a47ee16614be326b": "https://www.notion.so/altostratus-es/AWS-Listado-Provisiones-Bloqueadas-1aebbebfb49b8098b107e12b0c92a5de",
+}
+
+# URLs fijas para documentos por título (cuando la URL de la fuente no coincide)
+_TITLE_URL_MAP = {
+    "Listado de Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/AWS-Listado-Provisiones-Bloqueadas-1aebbebfb49b8098b107e12b0c92a5de",
+    "AWS - Listado Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/AWS-Listado-Provisiones-Bloqueadas-1aebbebfb49b8098b107e12b0c92a5de",
+    "Listado de provisiones en curso - EPPM": "https://www.notion.so/altostratus-es/Listado-de-provisiones-en-curso-EPPM-2a1bbebfb49b80448253f24cf172d70c",
+}
+
+
+def _map_url(title: str, url: str) -> str:
+    """Reemplaza la URL de la fuente por la URL de la vista para el comercial."""
+    # Primero intentar por título
+    if title in _TITLE_URL_MAP:
+        return _TITLE_URL_MAP[title]
+    # Luego por URL directa
+    if url in _URL_MAP:
+        return _URL_MAP[url]
+    return url
+
 
 def _summarize_db_row(row_text: str) -> str:
     """Extrae solo las columnas clave de una fila de BD."""
@@ -111,7 +136,7 @@ def search_aws_docs(query: str) -> dict:
                 "total_rows": total_rows,
                 "matched_rows": len(scored),
                 "content": content,
-                "url": r.get("url", ""),
+                "url": _map_url(r["title"], r.get("url", "")),
             })
         elif len(content) > 4000:
             scored = []
@@ -129,14 +154,14 @@ def search_aws_docs(query: str) -> dict:
                 "title": r["title"],
                 "type": r["type"],
                 "content": content,
-                "url": r.get("url", ""),
+                "url": _map_url(r["title"], r.get("url", "")),
             })
         else:
             formatted.append({
                 "title": r["title"],
                 "type": r["type"],
                 "content": content[:2000],
-                "url": r.get("url", ""),
+                "url": _map_url(r["title"], r.get("url", "")),
             })
     return {"status": "ok", "results": formatted[:5]}
 
