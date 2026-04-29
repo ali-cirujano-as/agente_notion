@@ -298,8 +298,9 @@ def create_app(
 
     # --- Handler: mensajes directos ---
     @slack_app.event("message")
-    def handle_message(body, client):
-        event = body.get("event", {})
+    def handle_message(event, client, ack, body):
+        ack()
+        logger.info(f"Evento recibido: channel_type={event.get('channel_type')}, user={event.get('user')}, text={event.get('text', '')[:50]}")
         # Solo procesar DMs, ignorar mensajes de bots
         if event.get("channel_type") != "im" or event.get("bot_id"):
             return

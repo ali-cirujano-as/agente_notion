@@ -101,3 +101,43 @@ app = create_app(
 )
 
 logger.info(f"Aplicación {bot_name} lista (BOT_TYPE={BOT_TYPE})")
+
+# --- Timer de reindexación automática cada 8 horas ---
+import threading
+from notion_shared.indexer import NotionIndexer
+
+REINDEX_INTERVAL_HOURS = 8
+
+
+def _background_reindex():
+    """Reindexa periódicamente en background."""
+    import time
+
+    notion_token = os.getenv("NOTION_TOKEN_AWS" if BOT_TYPE == "aws" else "NOTION_TOKEN_GCP", "")
+    cloud_filter = ["aws"] if BOT_TYPE == "aws" else ["gcp", "gws"]
+    gcs_path = f"{BOT_TYPE}/index.json"
+    local_path = f".data/{BOT_TYPE}_index.json"
+
+    # Reindexar al arrancar
+    try:
+        indexer = NotionIndexer(notion_token, local_path, cloud_filter=cloud_filter)
+        count = indexer.index_all()
+        indexer.save_index_to_gcs(gcs_client, gcs_path)
+        logger.info(f"Reindexación inicial completada: {count} documentos")
+    except Exception as e:
+        logger.error(f"Error en reindexación inicial: {e}")
+
+    # Reindexar cada N horas
+    while True:
+        time.sleep(REINDEX_INTERVAL_HOURS * 3600)
+        try:
+            indexer = NotionIndexer(notion_token, local_path, cloud_filter=cloud_filter)
+            count = indexer.index_all()
+            indexer.save_index_to_gcs(gcs_client, gcs_path)
+            logger.info(f"Reindexación periódica completada: {count} documentos")
+        except Exception as e:
+            logger.error(f"Error en reindexación periódica: {e}")
+
+
+reindex_thread = threading.Thread(target=_background_reindex, daemon=True)
+reindex_thread.start()
