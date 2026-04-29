@@ -296,6 +296,24 @@ def create_app(
         except Exception as e:
             logger.warning(f"No pude notificar a {requester_id}: {e}")
 
+    # Caché de emails de usuarios para no llamar a Slack API en cada mensaje
+    _user_email_cache: dict[str, str] = {}
+
+    def _get_user_email(client, user_id: str) -> str:
+        """Obtiene el email del usuario desde Slack API (con caché)."""
+        if user_id in _user_email_cache:
+            return _user_email_cache[user_id]
+        try:
+            info = client.users_info(user=user_id)
+            email = info["user"]["profile"].get("email", "")
+            name = info["user"]["real_name"]
+            _user_email_cache[user_id] = email
+            logger.info(f"Usuario identificado: {user_id} → {name} ({email})")
+            return email
+        except Exception as e:
+            logger.warning(f"No pude obtener email de {user_id}: {e}")
+            return ""
+
     # --- Handler: mensajes directos ---
     @slack_app.event("message")
     def handle_message(event, client, ack, body):
@@ -323,10 +341,20 @@ def create_app(
             _send_access_request_prompt(client, channel)
             return
 
-        # Procesar consulta ADK en background (ack ya fue enviado por slack-bolt)
+        # Obtener email del usuario para contexto personalizado
+        user_email = _get_user_email(client, user_id)
+        
+        # Añadir contexto del usuario a la consulta
+        if user_email:
+            context_prefix = f"[CONTEXTO: El usuario que pregunta es {user_email}. Si dice 'mis provisiones', 'mis clientes', 'lo mío', etc., filtra por su email en las columnas 'Comercial Responsable Altostratus' o 'Assignee'.]\n\n"
+            enriched_text = context_prefix + clean_text
+        else:
+            enriched_text = clean_text
+
+        # Procesar consulta ADK en background
         def _process_query():
             try:
-                response = _call_agent_async(runner, user_id, clean_text, session_service)
+                response = _call_agent_async(runner, user_id, enriched_text, session_service)
                 if response.strip():
                     client.chat_postMessage(
                         channel=channel,
