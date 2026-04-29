@@ -351,6 +351,9 @@ def create_app(
         else:
             enriched_text = clean_text
 
+        # Enviar indicador de que está trabajando
+        client.chat_postMessage(channel=channel, text="🔍 Consultando la documentación...")
+
         # Procesar consulta ADK en background
         def _process_query():
             try:
