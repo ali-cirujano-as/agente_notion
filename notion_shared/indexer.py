@@ -1,9 +1,9 @@
-"""Indexador de contenido de Notion a JSON local."""
+"""Indexador de contenido de Notion a JSON local o Cloud Storage."""
 import json
 import os
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from .notion_client import NotionClient
 from .text_extractor import (
     extract_block_text,
@@ -11,6 +11,9 @@ from .text_extractor import (
     extract_database_row,
     extract_property_value,
 )
+
+if TYPE_CHECKING:
+    from storage.gcs_client import GCSClient
 
 logger = logging.getLogger(__name__)
 
@@ -160,15 +163,68 @@ class NotionIndexer:
         )
         return len(self.documents)
 
-    def _save_index(self):
-        os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
+    def _save_index(self, gcs_client: "Optional[GCSClient]" = None, gcs_path: Optional[str] = None):
+        """Guarda el índice localmente y opcionalmente en Cloud Storage.
+
+        Args:
+            gcs_client: Cliente de Cloud Storage. Si se proporciona junto con
+                gcs_path, el índice se sube también a GCS.
+            gcs_path: Ruta dentro del bucket (e.g. "aws/index.json").
+        """
         data = {
             "indexed_at": datetime.now().isoformat(),
             "total_documents": len(self.documents),
             "documents": self.documents,
         }
+
+        # Siempre guardar localmente para desarrollo
+        os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
         with open(self.index_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # Si se proporciona GCS, subir también al bucket
+        if gcs_client is not None and gcs_path is not None:
+            self.save_index_to_gcs(gcs_client, gcs_path)
+
+    def save_index_to_gcs(self, gcs_client: "GCSClient", gcs_path: str) -> None:
+        """Sube el índice actual a Cloud Storage.
+
+        Args:
+            gcs_client: Cliente de Cloud Storage inicializado.
+            gcs_path: Ruta dentro del bucket (e.g. "aws/index.json").
+
+        Raises:
+            GCSError: Si la escritura a Cloud Storage falla.
+        """
+        data = {
+            "indexed_at": datetime.now().isoformat(),
+            "total_documents": len(self.documents),
+            "documents": self.documents,
+        }
+        gcs_client.write_json(gcs_path, data)
+        logger.info(f"Índice subido a GCS: {gcs_path} ({len(self.documents)} documentos)")
+
+    @staticmethod
+    def load_index_from_gcs(gcs_client: "GCSClient", gcs_path: str) -> list[dict]:
+        """Carga el índice desde Cloud Storage.
+
+        Args:
+            gcs_client: Cliente de Cloud Storage inicializado.
+            gcs_path: Ruta dentro del bucket (e.g. "aws/index.json").
+
+        Returns:
+            Lista de documentos del índice, o lista vacía si no existe.
+
+        Raises:
+            GCSError: Si Cloud Storage no está disponible.
+        """
+        data = gcs_client.read_json(gcs_path)
+        if data is None:
+            logger.warning(f"Índice no encontrado en GCS: {gcs_path}")
+            return []
+        documents = data.get("documents", [])
+        logger.info(f"Índice cargado desde GCS: {gcs_path} ({len(documents)} documentos)")
+        return documents
 
     def load_index(self) -> list[dict]:
         if os.path.exists(self.index_path):

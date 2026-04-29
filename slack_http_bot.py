@@ -4,7 +4,7 @@ Reemplaza slack_bot.py (Socket Mode) con un handler HTTP stateless
 compatible con Cloud Run. Usa SlackRequestHandler de slack-bolt para
 integrar con FastAPI.
 
-Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 3.3, 7.5
+Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 3.3, 4.2, 4.3, 4.4, 4.5, 7.5
 """
 
 import asyncio
@@ -15,6 +15,7 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from slack_bolt import App
 from slack_bolt.adapter.fastapi import SlackRequestHandler
 
@@ -23,6 +24,7 @@ from google.genai import types
 
 from storage.gcs_client import GCSClient
 from storage.whitelist import CloudWhitelist
+from notion_shared.indexer import NotionIndexer
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +363,60 @@ def create_app(
     @api.get("/health")
     async def health():
         return {"status": "ok"}
+
+    @api.post("/reindex")
+    async def reindex(req: Request):
+        """Endpoint de reindexación invocado por Cloud Scheduler.
+
+        Verifica autenticación por header, ejecuta indexación completa
+        de Notion y sube el resultado a Cloud Storage.
+
+        Requisitos: 4.2, 4.3, 4.4, 4.5
+        """
+        # Verificar autenticación
+        expected_token = os.getenv("REINDEX_AUTH_TOKEN", "")
+        auth_header = req.headers.get("authorization", "")
+
+        if not expected_token or auth_header != f"Bearer {expected_token}":
+            return JSONResponse(status_code=403, content={"error": "Forbidden"})
+
+        # Determinar configuración según BOT_TYPE
+        bot_type = os.getenv("BOT_TYPE", "").lower()
+        if bot_type == "aws":
+            notion_token = os.getenv("NOTION_TOKEN_AWS", "") or os.getenv("NOTION_TOKEN", "")
+            cloud_filter = ["aws"]
+            gcs_index_path = "aws/index.json"
+            local_index_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), ".data/aws_index.json"
+            )
+        elif bot_type == "gcp":
+            notion_token = os.getenv("NOTION_TOKEN_GCP", "") or os.getenv("NOTION_TOKEN", "")
+            cloud_filter = ["gcp", "gws"]
+            gcs_index_path = "gcp/index.json"
+            local_index_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), ".data/gcp_index.json"
+            )
+        else:
+            logger.error(f"BOT_TYPE no válido para reindexación: '{bot_type}'")
+            return JSONResponse(status_code=500, content={"error": "BOT_TYPE not configured"})
+
+        if not notion_token:
+            logger.error("NOTION_TOKEN no configurado para reindexación")
+            return JSONResponse(status_code=500, content={"error": "NOTION_TOKEN not configured"})
+
+        # Ejecutar indexación
+        try:
+            indexer = NotionIndexer(notion_token, local_index_path, cloud_filter=cloud_filter)
+            count = indexer.index_all()
+
+            # Subir índice a Cloud Storage
+            indexer.save_index_to_gcs(gcs_client, gcs_index_path)
+
+            logger.info(f"Reindexación completada: {count} documentos indexados")
+            return JSONResponse(status_code=200, content={"status": "ok", "documents_indexed": count})
+        except Exception as e:
+            logger.error(f"Error durante reindexación: {e}")
+            return JSONResponse(status_code=500, content={"error": str(e)})
 
     return api
 
