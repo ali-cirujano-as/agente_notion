@@ -158,12 +158,107 @@ def _background_reindex():
         time.sleep(wait_seconds)
 
         try:
+            # Guardar índice anterior para detectar cambios
+            previous_index = gcs_client.read_json(gcs_path)
+
+            # Reindexar
             indexer = NotionIndexer(notion_token, local_path, cloud_filter=cloud_filter)
             count = indexer.index_all()
             indexer.save_index_to_gcs(gcs_client, gcs_path)
             logger.info(f"Reindexación programada completada: {count} documentos")
+
+            # Detectar cambios de estado y notificar
+            if previous_index:
+                _detect_status_changes(previous_index, gcs_client.read_json(gcs_path))
         except Exception as e:
             logger.error(f"Error en reindexación programada: {e}")
+
+
+def _detect_status_changes(old_index: dict, new_index: dict):
+    """Detecta cambios de estado en provisiones y notifica al comercial."""
+    from slack_sdk import WebClient
+
+    bot_token = os.getenv("SLACK_BOT_TOKEN", "")
+    if not bot_token:
+        return
+
+    client = WebClient(token=bot_token)
+
+    # Extraer filas con status del índice anterior
+    def _extract_rows(index_data):
+        rows = {}  # key → {cliente, status, email}
+        for doc in index_data.get("documents", []):
+            for line in doc.get("content", "").split("\n"):
+                if " | " not in line or "Cliente:" not in line or "Status:" not in line:
+                    continue
+                parts = line.split(" | ")
+                cliente = ""
+                status = ""
+                email = ""
+                key = ""
+                for part in parts:
+                    if part.startswith("Cliente: "):
+                        cliente = part.replace("Cliente: ", "")
+                    elif part.startswith("Status: "):
+                        status = part.replace("Status: ", "")
+                    elif part.startswith("Comercial Responsable Altostratus: "):
+                        email = part.replace("Comercial Responsable Altostratus: ", "")
+                    elif part.startswith("Key: "):
+                        key = part.replace("Key: ", "")
+                if cliente and status:
+                    row_id = key or cliente
+                    rows[row_id] = {"cliente": cliente, "status": status, "email": email}
+        return rows
+
+    old_rows = _extract_rows(old_index)
+    new_rows = _extract_rows(new_index)
+
+    # Detectar cambios
+    changes = []
+    for row_id, new_data in new_rows.items():
+        if row_id in old_rows:
+            old_status = old_rows[row_id]["status"]
+            new_status = new_data["status"]
+            if old_status != new_status:
+                changes.append({
+                    "cliente": new_data["cliente"],
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "email": new_data["email"],
+                })
+
+    if not changes:
+        logger.info("No hay cambios de estado")
+        return
+
+    logger.info(f"Detectados {len(changes)} cambios de estado")
+
+    # Agrupar por email y notificar
+    from storage.whitelist import CloudWhitelist
+    prefix = os.getenv("BOT_TYPE", "aws")
+    whitelist = CloudWhitelist(gcs_client, prefix)
+    users = whitelist.list_users()
+
+    for user_id in users:
+        try:
+            info = client.users_info(user=user_id)
+            user_email = info["user"]["profile"].get("email", "")
+            if not user_email:
+                continue
+
+            user_changes = [c for c in changes if c["email"] == user_email]
+            if not user_changes:
+                continue
+
+            for change in user_changes:
+                emoji = "✅" if "bloqueado" in change["old_status"].lower() else "🔄"
+                msg = f"{emoji} *{change['cliente']}* ha cambiado de estado:\n_{change['old_status']}_ → *{change['new_status']}*"
+                dm = client.conversations_open(users=[user_id])
+                client.chat_postMessage(channel=dm["channel"]["id"], text=msg)
+
+            logger.info(f"Notificados {len(user_changes)} cambios a {user_id}")
+        except Exception as e:
+            logger.warning(f"Error notificando cambios a {user_id}: {e}")
 
 
 reindex_thread = threading.Thread(target=_background_reindex, daemon=True)
