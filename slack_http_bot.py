@@ -648,3 +648,124 @@ def start_daily_summary_timer(slack_app: App, whitelist: CloudWhitelist, gcs_cli
     thread = threading.Thread(target=_timer_loop, daemon=True)
     thread.start()
     logger.info("Timer de resumen semanal iniciado (lunes 9:00 AM España)")
+
+
+# --- Alerta de renovaciones a 30 días ---
+
+def start_renewal_alert_timer(whitelist: CloudWhitelist, gcs_client: GCSClient, bot_name: str):
+    """Envía alertas diarias cuando una renovación vence en 30 días o menos."""
+    import time
+    from datetime import datetime, timedelta, date
+    import pytz
+
+    SPAIN_TZ = pytz.timezone("Europe/Madrid")
+    TARGET_HOUR = 9
+    ALERT_DAYS = 30  # Alertar cuando faltan 30 días o menos
+
+    bot_type = os.getenv("BOT_TYPE", "").lower()
+    if bot_type == "aws":
+        URL_RENOVACIONES = "https://www.notion.so/altostratus-es/Listado-de-provisiones-en-curso-EPPM-2a1bbebfb49b80448253f24cf172d70c"
+    else:
+        URL_RENOVACIONES = "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe"
+
+    def _check_and_alert():
+        """Verifica renovaciones próximas y envía alertas."""
+        from slack_sdk import WebClient
+
+        bot_token = os.getenv("SLACK_BOT_TOKEN", "")
+        if not bot_token:
+            return
+
+        client = WebClient(token=bot_token)
+        prefix = bot_name.lower().replace(" ", "_").split("_")[0]
+        index_data = gcs_client.read_json(f"{prefix}/index.json")
+        if not index_data:
+            return
+        index_docs = index_data.get("documents", [])
+
+        today = date.today()
+        alert_threshold = today + timedelta(days=ALERT_DAYS)
+
+        # Buscar renovaciones que vencen en 30 días o menos
+        alerts_by_email = {}  # email → lista de (cliente, fecha)
+
+        for doc in index_docs:
+            for line in doc.get("content", "").split("\n"):
+                if " | " not in line or "Fecha Fin Real:" not in line:
+                    continue
+
+                parts = line.split(" | ")
+                cliente = ""
+                fecha_str = ""
+                email = ""
+
+                for part in parts:
+                    if part.startswith("Cliente: "):
+                        cliente = part.replace("Cliente: ", "")
+                    elif part.startswith("Fecha Fin Real: "):
+                        fecha_str = part.replace("Fecha Fin Real: ", "").strip()
+                    elif part.startswith("Comercial Responsable Altostratus: "):
+                        email = part.replace("Comercial Responsable Altostratus: ", "").strip()
+
+                if not fecha_str or not email or not cliente:
+                    continue
+
+                try:
+                    fecha = date.fromisoformat(fecha_str[:10])
+                except (ValueError, IndexError):
+                    continue
+
+                # Alertar si vence en exactamente 30 días (±1 día)
+                days_left = (fecha - today).days
+                if 29 <= days_left <= 31:
+                    if email not in alerts_by_email:
+                        alerts_by_email[email] = []
+                    alerts_by_email[email].append((cliente, fecha_str))
+
+        if not alerts_by_email:
+            logger.info("No hay renovaciones a 30 días hoy")
+            return
+
+        # Enviar alertas a los comerciales
+        users = whitelist.list_users()
+        for user_id in users:
+            try:
+                info = client.users_info(user=user_id)
+                user_email = info["user"]["profile"].get("email", "")
+                if not user_email or user_email not in alerts_by_email:
+                    continue
+
+                renewals = alerts_by_email[user_email]
+                for cliente, fecha in renewals:
+                    msg = f"⚠️ La renovación de *{cliente}* vence en 30 días ({fecha}).\n📎 <{URL_RENOVACIONES}|Ver renovaciones>"
+                    dm = client.conversations_open(users=[user_id])
+                    client.chat_postMessage(channel=dm["channel"]["id"], text=msg)
+                    logger.info(f"Alerta de renovación enviada a {user_id}: {cliente}")
+
+            except Exception as e:
+                logger.warning(f"Error enviando alerta a {user_id}: {e}")
+
+    def _timer_loop():
+        """Check diario a las 9:00 AM España."""
+        while True:
+            now = datetime.now(SPAIN_TZ)
+            target = now.replace(hour=TARGET_HOUR, minute=5, second=0, microsecond=0)
+            if now >= target:
+                target += timedelta(days=1)
+
+            # Solo ejecutar en días laborables (lunes a viernes)
+            while target.weekday() >= 5:  # 5=sábado, 6=domingo
+                target += timedelta(days=1)
+
+            wait_seconds = (target - now).total_seconds()
+            logger.info(f"Alerta de renovaciones programada en {wait_seconds/3600:.1f}h")
+            time.sleep(wait_seconds)
+
+            try:
+                _check_and_alert()
+            except Exception as e:
+                logger.error(f"Error en alerta de renovaciones: {e}")
+
+    thread = threading.Thread(target=_timer_loop, daemon=True)
+    thread.start()
+    logger.info("Timer de alertas de renovación iniciado (diario 9:05 AM, L-V)")

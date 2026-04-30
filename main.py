@@ -89,7 +89,7 @@ elif BOT_TYPE == "gcp":
     logger.info("Cargando agente GCP")
 
 # --- Crear aplicación FastAPI ---
-from slack_http_bot import create_app, start_daily_summary_timer
+from slack_http_bot import create_app, start_daily_summary_timer, start_renewal_alert_timer
 
 app = create_app(
     bot_token=SLACK_BOT_TOKEN,
@@ -105,6 +105,7 @@ prefix = bot_name.lower().replace(" ", "_").split("_")[0]
 from storage.whitelist import CloudWhitelist
 whitelist_for_summary = CloudWhitelist(gcs_client, prefix)
 start_daily_summary_timer(None, whitelist_for_summary, gcs_client, bot_name)
+start_renewal_alert_timer(whitelist_for_summary, gcs_client, bot_name)
 
 logger.info(f"Aplicación {bot_name} lista (BOT_TYPE={BOT_TYPE})")
 
