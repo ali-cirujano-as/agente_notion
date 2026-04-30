@@ -41,8 +41,8 @@ _TITLE_URL_MAP = {
     "GWS - Listado Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/GWS-Listado-Provisiones-Bloqueadas-1acbbebfb49b807984f5e12c01e946f0",
     "Listado de Avisos de Renovación GWS": "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe",
     "GWS - Avisos de Renovación": "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe",
-    "GWS Licencias Caducadas": "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe",
-    "[Actualizado 23.03.2026] Licencias Caducadas a reclamar a TCCT  - Licencias Caducadas notion (1).csv": "https://www.notion.so/altostratus-es/GWS-Avisos-de-Renovaci-n-1acbbebfb49b80ff86eec0bc50f253fe",
+    "GWS Licencias Caducadas": "https://www.notion.so/altostratus-es/GWS-Licencias-Caducadas-1acbbebfb49b80fbb7e3eb23efbc9bc8",
+    "[Actualizado 23.03.2026] Licencias Caducadas a reclamar a TCCT  - Licencias Caducadas notion (1).csv": "https://www.notion.so/altostratus-es/GWS-Licencias-Caducadas-1acbbebfb49b80fbb7e3eb23efbc9bc8",
     "Listado de provisiones en curso - EPPM": "https://www.notion.so/altostratus-es/GCP-Listado-Provisiones-Bloqueadas-1acbbebfb49b800c9b8af8d967f12429",
 }
 
