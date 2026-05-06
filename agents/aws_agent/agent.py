@@ -35,6 +35,9 @@ indexer = NotionIndexer(
     gcs_path=_gcs_path,
 )
 
+# Pre-cargar índice en memoria al arrancar para evitar latencia en la primera consulta
+indexer.load_index()
+
 # Mapeo de URLs: fuente → vista que ve el comercial
 # Cuando el agente responde, usa estas URLs en vez de las de la fuente
 _URL_MAP = {

@@ -34,6 +34,9 @@ indexer = NotionIndexer(
     gcs_path=_gcs_path,
 )
 
+# Pre-cargar índice en memoria al arrancar para evitar latencia en la primera consulta
+indexer.load_index()
+
 # Mapeo de URLs: título del documento → URL de la vista que ve el comercial
 _TITLE_URL_MAP = {
     "Listado de Provisiones Bloqueadas": "https://www.notion.so/altostratus-es/GCP-Listado-Provisiones-Bloqueadas-1acbbebfb49b800c9b8af8d967f12429",

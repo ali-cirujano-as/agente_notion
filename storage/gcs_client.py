@@ -64,8 +64,6 @@ class GCSClient:
         """
         try:
             blob = self._bucket.blob(path)
-            if not blob.exists():
-                return None
             content = blob.download_as_text(encoding="utf-8")
             return json.loads(content)
         except gcs_exceptions.NotFound:
