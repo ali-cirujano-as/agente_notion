@@ -385,3 +385,94 @@ Si Ali deja el proyecto, el nuevo mantenedor necesita:
 - Saber gestionar la whitelist (comandos admin en Slack)
 - Saber compartir BDs de Notion con las integraciones
 - Saber crear/modificar apps de Slack (sección 8)
+
+
+## 15. Despliegue en Google Cloud (Producción)
+
+### Infraestructura actual
+
+Los bots están desplegados en una VM de Google Cloud que corre 24/7. Ya no dependen del Mac de Ali.
+
+| Recurso | Valor |
+|---|---|
+| Proyecto GCP | agentes-notion-bizops |
+| VM | slack-bots |
+| Zona | europe-southwest1-a |
+| Tipo de máquina | e2-micro |
+| Imagen Docker | europe-southwest1-docker.pkg.dev/agentes-notion-bizops/slack-bots/bizops-bots:latest |
+| Red | VPC default + Cloud NAT (sin IP externa) |
+| Artifact Registry | europe-southwest1-docker.pkg.dev/agentes-notion-bizops/slack-bots |
+
+### Cómo funciona
+
+La VM ejecuta un contenedor Docker que al arrancar: configura un cron interno para reindexar a las 6:00 y 14:00, ejecuta una reindexación inicial, arranca ambos bots (AWS y GCP) en paralelo. Si un bot se cae, el contenedor se reinicia automáticamente (restart-policy: always).
+
+### Cómo actualizar los bots después de hacer cambios en el código
+
+Después de modificar el código localmente y hacer push a GitHub, ejecuta estos dos comandos para desplegar:
+
+Paso 1 - Reconstruir la imagen Docker: cd ~/Documents/claudecode/notion_AS/adk-python seguido de gcloud builds submit --tag europe-southwest1-docker.pkg.dev/agentes-notion-bizops/slack-bots/bizops-bots:latest
+
+Paso 2 - Actualizar la VM con la nueva imagen: gcloud compute instances update-container slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops --container-image=europe-southwest1-docker.pkg.dev/agentes-notion-bizops/slack-bots/bizops-bots:latest
+
+La VM se reiniciará automáticamente con la nueva versión.
+
+### Cómo ver los logs de la VM
+
+Para ver si los bots están corriendo y si hay errores: gcloud compute ssh slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops --tunnel-through-iap -- "docker logs \$(docker ps -q) --tail 50"
+
+### Cómo reiniciar la VM
+
+Si los bots dejan de responder: gcloud compute instances reset slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops
+
+### Cómo parar y arrancar la VM
+
+Parar (ahorra costes): gcloud compute instances stop slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops
+
+Arrancar: gcloud compute instances start slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops
+
+### Variables de entorno en la VM
+
+Las variables de entorno (tokens, API keys) están configuradas directamente en el contenedor de la VM. Si necesitas cambiar un token, hay que recrear la VM o actualizar el contenedor con las nuevas variables.
+
+### Costes estimados
+
+La VM e2-micro está dentro del free tier de GCP (1 instancia e2-micro gratis por mes en regiones elegibles). El Cloud NAT tiene un coste mínimo (~1-2 EUR/mes). Cloud Build cobra por minuto de build (~0.003 EUR/min, cada build tarda ~2-3 min).
+
+### Futuro: CI/CD automático
+
+Está pendiente configurar GitHub Actions para que cuando alguien haga push al repo, automáticamente se reconstruya la imagen y se despliegue en la VM. Mientras tanto, el despliegue es manual con los dos comandos de arriba.
+
+## 16. Resumen de Comandos Útiles
+
+### Arrancar bots en local (desarrollo)
+
+Terminal 1 AWS: cd ~/Documents/claudecode/notion_AS/adk-python && .venv/bin/python run_aws_bot.py
+
+Terminal 2 GCP: cd ~/Documents/claudecode/notion_AS/adk-python && .venv/bin/python run_gcp_bot.py
+
+### Reindexar manualmente
+
+Desde terminal: cd ~/Documents/claudecode/notion_AS/adk-python && .venv/bin/python cron_reindex.py
+
+Desde Slack: escribir al bot "Reindexa la documentación"
+
+### Subir cambios a GitHub
+
+cd ~/Documents/claudecode/notion_AS/adk-python seguido de git add -A seguido de git commit -m "descripción del cambio" seguido de git push origin main
+
+### Desplegar cambios en la VM de producción
+
+cd ~/Documents/claudecode/notion_AS/adk-python seguido de gcloud builds submit --tag europe-southwest1-docker.pkg.dev/agentes-notion-bizops/slack-bots/bizops-bots:latest seguido de gcloud compute instances update-container slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops --container-image=europe-southwest1-docker.pkg.dev/agentes-notion-bizops/slack-bots/bizops-bots:latest
+
+### Ver logs de producción
+
+gcloud compute ssh slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops --tunnel-through-iap -- "docker logs \$(docker ps -q) --tail 50"
+
+### Reiniciar VM de producción
+
+gcloud compute instances reset slack-bots --zone=europe-southwest1-a --project=agentes-notion-bizops
+
+### Gestionar usuarios en Slack
+
+admin lista → ver usuarios con acceso. admin añadir @usuario → dar acceso. admin quitar @usuario → quitar acceso.

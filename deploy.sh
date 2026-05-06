@@ -28,9 +28,9 @@ AR_REPO="slack-bots"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/bizops-bots:latest"
 
 # Cloud Run settings
-MEMORY="512Mi"
+MEMORY="256Mi"
 CPU="1"
-MIN_INSTANCES="0"
+MIN_INSTANCES="1"
 MAX_INSTANCES="3"
 TIMEOUT="300s"
 
